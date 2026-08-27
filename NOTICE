@@ -1,0 +1,13 @@
+Exuro Agent
+Copyright (c) 2026 Exuro AI
+
+This product is a modified distribution of Hermes Agent
+(https://github.com/NousResearch/hermes-agent), Copyright (c) Nous Research,
+licensed under the MIT License. The upstream LICENSE file is retained
+unmodified in this repository.
+
+Modifications by Exuro AI are documented in FORK.md and are likewise
+MIT-licensed.
+
+"Hermes" and "Nous Research" are marks of their respective owners. Use of the
+upstream software under the MIT License does not convey trademark rights.

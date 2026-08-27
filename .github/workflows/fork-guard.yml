@@ -1,0 +1,74 @@
+name: fork-guard
+
+# The fork contract, enforced mechanically. Any file this fork changes relative to
+# upstream must be listed in .forkallow, and every entry must have a row in FORK.md.
+#
+# This is the single most valuable file in the fork repo. Without it, "we'll keep the
+# fork thin" is an intention. With it, it's an invariant.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/NousResearch/hermes-agent.git 2>/dev/null || true
+          git fetch upstream --tags --prune --force
+
+      - name: Diff the fork against upstream
+        run: |
+          BASE=$(git merge-base HEAD upstream/main)
+          git diff --name-only "$BASE" HEAD > /tmp/changed.txt
+          echo "Files this fork changes relative to upstream:"
+          cat /tmp/changed.txt
+
+      - name: Enforce .forkallow
+        run: |
+          VIOLATIONS=0
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            ALLOWED=0
+            while IFS= read -r pat; do
+              case "$pat" in ''|\#*) continue ;; esac
+              case "$f" in $pat) ALLOWED=1; break ;; esac
+            done < .forkallow
+            if [ "$ALLOWED" -eq 0 ]; then
+              echo "::error file=$f::not in .forkallow — this belongs in the hermes-exuro plugin repo, not the fork"
+              VIOLATIONS=$((VIOLATIONS+1))
+            fi
+          done < /tmp/changed.txt
+
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo
+            echo "$VIOLATIONS file(s) violate the fork contract."
+            echo "Before adding to .forkallow, walk upstream's Footprint Ladder:"
+            echo "  extend existing code -> CLI command + skill -> service-gated tool"
+            echo "  -> plugin -> MCP server -> new core tool (last resort)"
+            echo "Rungs 1-5 all live outside this repo. Only rung 6 is ever a fork patch,"
+            echo "and it needs an upstream PR the same day."
+            exit 1
+          fi
+          echo "Fork contract satisfied."
+
+      - name: Warn on god-file edits
+        run: |
+          # These are the files upstream refactors constantly. Editing them is legal
+          # if allowlisted, but it is the #1 source of permanent merge pain.
+          for f in run_agent.py cli.py gateway/run.py model_tools.py toolsets.py hermes_cli/main.py; do
+            if grep -qx "$f" /tmp/changed.txt; then
+              echo "::warning file=$f::god-file patched — expect a conflict on every sync. Prefer a new file or a plugin hook."
+            fi
+          done
