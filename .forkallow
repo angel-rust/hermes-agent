@@ -1,0 +1,9 @@
+# Files this fork is permitted to modify relative to upstream-main.
+# fork-guard CI fails on any changed path not matching a line here.
+# Adding a line requires a row in FORK.md. Keep this list short.
+FORK.md
+NOTICE
+.forkallow
+.github/workflows/upstream-sync.yml
+.github/workflows/fork-guard.yml
+scripts/exuro-sync.sh

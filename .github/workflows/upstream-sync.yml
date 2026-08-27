@@ -1,0 +1,139 @@
+name: upstream-sync
+
+# Fast-forwards the pristine `upstream-main` mirror, then opens a PR merging the
+# latest upstream RELEASE TAG into `main`. Never tracks upstream `main` directly —
+# production pins tags, and a human promotes.
+#
+# NOTE: upstream pins every action to a commit SHA (dependency-pinning policy,
+# post-litellm / Shai-Hulud). Do the same here before this goes anywhere near a
+# client build: replace @v4 with @<sha>  # v4.
+
+on:
+  schedule:
+    - cron: "17 8 * * *"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Upstream ref to merge (blank = latest release tag)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  UPSTREAM: https://github.com/NousResearch/hermes-agent.git
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Configure git
+        run: |
+          git config user.name  "exuro-sync[bot]"
+          git config user.email "sync@exuro.ai"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "$UPSTREAM" 2>/dev/null || git remote set-url upstream "$UPSTREAM"
+          git fetch upstream --tags --prune --force
+
+      - name: Fast-forward the pristine mirror
+        run: |
+          # upstream-main is a mirror. Force-push is correct here and only here.
+          git push origin "refs/remotes/upstream/main:refs/heads/upstream-main" --force
+
+      - name: Resolve target tag
+        id: target
+        run: |
+          if [ -n "${{ inputs.target }}" ]; then
+            TARGET="${{ inputs.target }}"
+          else
+            # Latest upstream tag by creation date. Adjust the filter if upstream
+            # changes its tag convention.
+            TARGET=$(git tag -l 'v*' --sort=-creatordate --merged upstream/main | head -1)
+          fi
+          [ -n "$TARGET" ] || { echo "::error::no upstream tag resolved"; exit 1; }
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "Target: $TARGET"
+
+      - name: Already merged?
+        id: check
+        run: |
+          if git merge-base --is-ancestor "${{ steps.target.outputs.target }}" HEAD; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "main already contains ${{ steps.target.outputs.target }} — nothing to do."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge upstream tag
+        if: steps.check.outputs.skip == 'false'
+        id: merge
+        run: |
+          TARGET="${{ steps.target.outputs.target }}"
+          BRANCH="sync/${TARGET}-$(date +%Y%m%d)"
+          git checkout -b "$BRANCH"
+
+          # Merge, never rebase: this fork is public and consumers track its history.
+          if git merge --no-ff --no-edit "$TARGET"; then
+            echo "conflicts=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "conflicts=true" >> "$GITHUB_OUTPUT"
+            # Commit the conflict markers deliberately so the PR shows exactly where
+            # the fork collides with upstream. Reviewers resolve in the PR branch.
+            git add -A
+            git commit -m "sync: merge ${TARGET} (CONFLICTS — needs resolution)"
+            git diff --name-only --diff-filter=U HEAD~1 > /tmp/conflicts.txt || true
+          fi
+
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          git push origin "$BRANCH"
+
+      - name: Open PR
+        if: steps.check.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TARGET="${{ steps.target.outputs.target }}"
+          CONFLICTS="${{ steps.merge.outputs.conflicts }}"
+
+          {
+            echo "Merges upstream \`${TARGET}\` into \`main\`."
+            echo
+            if [ "$CONFLICTS" = "true" ]; then
+              echo "## ⚠ Conflicts — resolve in this branch"
+              echo
+              echo "Conflicting paths must all appear in \`.forkallow\`. If any do not,"
+              echo "the fork contract was violated — fix that before resolving."
+              echo
+              echo '```'
+              cat /tmp/conflicts.txt 2>/dev/null || echo "(see checks)"
+              echo '```'
+            else
+              echo "Clean merge."
+            fi
+            echo
+            echo "## Reviewer checklist (FORK.md)"
+            echo "- [ ] \`scripts/run_tests.sh\` green (not bare pytest — the wrapper enforces CI parity)"
+            echo "- [ ] every patch in the FORK.md table re-justified against this upstream"
+            echo "- [ ] any patch upstream has now implemented is **deleted**, not re-merged"
+            echo "- [ ] tag \`v<upstream>+exuro.N\` cut after merge"
+            echo "- [ ] \`hermes-dist\` VERSIONS bumped"
+          } > /tmp/body.md
+
+          LABELS="upstream-sync"
+          [ "$CONFLICTS" = "true" ] && LABELS="upstream-sync,sync-conflict"
+
+          gh pr create \
+            --base main \
+            --head "${{ steps.merge.outputs.branch }}" \
+            --title "sync: upstream ${TARGET}" \
+            --body-file /tmp/body.md \
+            --label "$LABELS"
