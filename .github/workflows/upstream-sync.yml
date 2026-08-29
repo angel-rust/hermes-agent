@@ -21,6 +21,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  workflows: write
 
 env:
   UPSTREAM: https://github.com/NousResearch/hermes-agent.git
