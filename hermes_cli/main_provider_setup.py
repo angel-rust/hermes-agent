@@ -24,7 +24,7 @@ def _is_profile_api_key_provider(provider_id: str) -> bool:
 _GENERIC_API_KEY_PROVIDERS = frozenset({
     "openai-api", "gemini", "deepseek", "xai", "zai", "kimi-coding-cn",
     "minimax", "minimax-cn", "kilocode", "opencode-zen", "opencode-go",
-    "opencode-free", "alibaba", "huggingface", "xiaomi", "arcee", "gmi",
+    "alibaba", "huggingface", "xiaomi", "arcee", "gmi",
     "nvidia", "ollama-cloud", "tencent-tokenhub", "tencent-tokenplan", "lmstudio"})
 
 
@@ -937,6 +937,11 @@ def _build_provider_picker_rows(config: dict, active: str, provider_labels: dict
         _add(key, f"{provider_info['name']} ({_short_url(provider_info['base_url'])}){model_hint}", [],
              bool(active) and key == active)
 
+    from hermes_cli.model_setup_flows_local import local_models_available
+    from hermes_cli.providers import LLAMACPP_ALIASES
+    if not _cli_excluded & set(LLAMACPP_ALIASES) and local_models_available():
+        _add("llamacpp", "Local models (run open models on this machine — no account or API key)", [],
+             active == "llamacpp")
     ordered.append(("custom", "Custom endpoint (enter URL manually)", []))
     if isinstance(config.get("custom_providers"), list) and config.get("custom_providers"):
         ordered.append(("remove-custom", "Remove a saved custom provider", []))
