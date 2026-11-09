@@ -89,7 +89,7 @@ telegram:
   observe_unmentioned_group_messages: true
 ```
 
-启用此模式后，来自明确白名单聊天/话题的未提及群组消息会作为观察上下文追加到共享聊天/话题会话记录中，但不会触发 Agent。`allowed_chats` 控制机器人在哪里响应；`group_allowed_chats` 授权用于观察上下文的共享群组会话，因此在此模式下使用相同的聊天 ID。同一白名单聊天/话题中后续的 `@botname` 提及、对机器人的回复或配置的提及模式可以使用该观察上下文。触发消息还会标记 `[nickname|user_id]`，并获得每轮安全 prompt（提示词），使模型将之前观察到的内容视为上下文而非发给机器人的指令。
+启用此模式后，来自明确白名单聊天/话题的未提及群组消息会作为观察上下文追加到共享聊天/话题会话记录中，但不会触发 Agent。`allowed_chats` 控制机器人在哪里响应；`group_allowed_chats` 授权用于观察上下文的共享群组会话，因此在此模式下使用相同的聊天 ID。同一白名单聊天/话题中后续的 `@botname` 提及、对机器人的回复或配置的提及模式可以使用该观察上下文。触发消息还会标记 `[nickname|user_id]`，并获得每轮安全 prompt（提示词），使模型将之前观察到的内容视为上下文而非发给机器人的指令。在该聊天/话题中发送的斜杠命令（`/new`、`/model`、`/undo`、技能命令）作用于同一个共享会话，而仅限管理员的命令仍按发送者进行检查。
 
 等效环境变量：
 
@@ -1202,7 +1202,7 @@ telegram:
 
 点击按钮回答，或点击 **Other** 输入自由形式的回复（你发送的下一条消息成为答案）。开放式 `clarify` 调用（无预设选项）跳过按钮，直接捕获你的下一条消息。
 
-通过 `~/.hermes/config.yaml` 中的 `agent.clarify_timeout` 配置响应超时（默认 `600` 秒）。如果你在超时内没有响应，Agent 会以哨兵消息解除阻塞并适应，而不是挂起。
+通过 `~/.hermes/config.yaml` 中的 `agent.clarify_timeout` 配置响应超时（默认 `90` 秒；`0` 或更小 = 不限时）。如果你在超时内没有响应，Agent 会以哨兵消息解除阻塞并适应，而不是挂起。
 
 ## 推送通知音量
 
@@ -1238,4 +1238,4 @@ HERMES_TELEGRAM_NOTIFICATIONS=all
 
 切勿公开分享你的机器人 token。如果泄露，请立即通过 BotFather 的 `/revoke` 命令撤销。
 
-更多详情，请参阅[安全文档](/user-guide/security)。你也可以使用 [DM 配对](/user-guide/messaging#dm-pairing-alternative-to-allowlists) 进行更动态的用户授权方式。
+更多详情，请参阅[安全文档](../security.md)。你也可以使用 [DM 配对](./index.md#dm-pairing-alternative-to-allowlists) 进行更动态的用户授权方式。
